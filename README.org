@@ -1,0 +1,156 @@
+#+TITLE: org-linear
+
+Read and edit [[https://linear.app][Linear]] issues in Org mode buffers.
+
+* Setup
+
+Requires Emacs 29.1+ and Org 9.6+.
+
+#+begin_src sh
+git clone https://github.com/joachimvelde/org-linear.git
+#+end_src
+
+#+begin_src emacs-lisp
+(add-to-list 'load-path "/path/to/org-linear")
+(require 'org-linear)
+#+end_src
+
+Create a personal API key in Linear under Settings → Security & access. org-linear reads it with =auth-source=, from any of:
+
+- =~/.authinfo.gpg=: add =machine api.linear.app password lin_api_...= (needs GnuPG).
+- macOS Keychain: run =security add-internet-password -s api.linear.app -a linear -w=, and set =(setq auth-sources '(macos-keychain-internet))=.
+- =org-linear-api-key=: set it to a string, or to a function that returns the key.
+
+* Commands
+
+Start with these. They have no global key; bind them if you like.
+
+| Command                  | What it does                                               |
+|--------------------------+------------------------------------------------------------|
+| =org-linear-list-issues= | List your open issues. With =C-u=, pick a view.            |
+| =org-linear-open-issue=  | Open one issue by identifier (=ENG-12=), default at point. |
+
+#+begin_src emacs-lisp
+(global-set-key (kbd "C-c l l") #'org-linear-list-issues)
+(global-set-key (kbd "C-c l o") #'org-linear-open-issue)
+#+end_src
+
+** In issue lists and issue buffers
+
+| Key           | Evil          | Command                       | What it does                                                           |
+|---------------+---------------+-------------------------------+------------------------------------------------------------------------|
+| =RET=         | =RET=         | =org-linear-open-at-point=    | Follow the link at point, else open the issue at point.                |
+| =g=           | =gr=          | =org-linear-refresh=          | Fetch the buffer again. Point stays on the same issue.                 |
+| =w=           | =gy=          | =org-linear-copy-identifier=  | Copy the identifier of the issue at point.                             |
+| =q=           | =q=           | =quit-window=                 | Close the buffer's window.                                             |
+| =C-c C-t=     | =C-c C-t=     | =org-linear-set-state=        | Change the state, from the team's states.                              |
+| =C-c ,=       | =C-c ,=       | =org-linear-set-priority=     | Change the priority.                                                   |
+| =C-c C-x t=   | =C-c C-x t=   | =org-linear-edit-title=       | Edit the title in the minibuffer.                                      |
+| =C-c '=       | =C-c '=       | =org-linear-edit-description= | Edit the description in an edit buffer.                                |
+| =C-c C-z=     | =C-c C-z=     | =org-linear-add-comment=      | Write a comment. On a comment, reply to its thread. =C-u=: new thread. |
+| =C-c C-x C-w= | =C-c C-x C-w= | =org-linear-delete-comment=   | Delete the comment at point, after confirming.                         |
+| =C-c C-o=     | =C-c C-o=     | =org-open-at-point=           | Open the link at point, e.g. the issue in the browser.                 |
+
+The buffers are read-only. Changes go to Linear, then the buffer is fetched again. A change applies to the issue that point is in, including its description and comments. On a sub-issue heading, it applies to the sub-issue.
+
+** In edit buffers
+
+Descriptions and comments are written in Org, in an edit buffer.
+
+| Key       | Command                 | What it does                                                    |
+|-----------+-------------------------+-----------------------------------------------------------------|
+| =C-c C-c= | =org-linear-edit-save=  | Convert to Markdown and send. On failure the buffer stays open. |
+| =C-c C-k= | =org-linear-edit-abort= | Close without sending; asks first if you changed the text.      |
+
+Before saving a description, org-linear checks whether it changed in Linear since you opened it, and asks before overwriting.
+
+Linear threads have one level of replies, so a reply to a reply goes to the thread's first comment. Linear only lets you delete your own comments.
+
+** Other
+
+| Command                      | What it does                                           |
+|------------------------------+--------------------------------------------------------|
+| =org-linear-api-clear-cache= | Forget cached team states, e.g. after a team adds one. |
+
+=org-linear-view-mode= and =org-linear-edit-mode= are the minor modes that carry the keys above. org-linear turns them on itself.
+
+* Buffers
+
+** Issue list
+
+Issues are grouped by state: started, unstarted, backlog, triage, then done states. Within a group they sort by priority, then by last update.
+
+#+begin_example
+,* In Progress (6)
+,** STARTED [#B] [[https://linear.app/acme/issue/ENG-12][ENG-12]] Fix login timeout :Bug:
+DEADLINE: <2026-11-12 Thu>
+:PROPERTIES:
+:LINEAR_ID: 3f2b8c1e-0000-4000-8000-000000000012
+:LINEAR_IDENTIFIER: ENG-12
+:LINEAR_STATE: In Progress
+:LINEAR_TEAM: ENG
+:END:
+#+end_example
+
+** Single issue
+
+One level-1 heading for the issue, with these sections:
+
+- *Description*, converted from Markdown.
+- *Sub-issues*, as headings. =RET= opens one.
+- *Attachments*, such as linked pull requests.
+- *Comments*, oldest first. Replies are nested under the comment they answer. Only the first 100 are fetched.
+
+Markdown converts to Org and back without changing its meaning. Some text comes back in an equivalent form, such as =[X]= as =[x]=.
+
+* Mapping
+
+| Linear                 | Org                                                                                    |
+|------------------------+----------------------------------------------------------------------------------------|
+| State type             | TODO keyword: =TRIAGE= =BACKLOG= =TODO= =STARTED=; done: =DONE= =CANCELED= =DUPLICATE= |
+| State name             | =LINEAR_STATE= property and group heading                                              |
+| Urgent/High/Medium/Low | =[#A]= / =[#B]= / =[#C]= / =[#D]=; no priority has no cookie and sorts last            |
+| Labels                 | Tags; characters Org disallows become =_=                                              |
+| Due date               | =DEADLINE=                                                                             |
+| Identifier             | Link to the issue in Linear                                                            |
+
+Each buffer sets its own =#+TODO:= and =#+PRIORITIES:= lines. Your global Org settings are not changed.
+
+* Configuration
+
+| Variable                      | Default                 | Meaning                                          |
+|-------------------------------+-------------------------+--------------------------------------------------|
+| =org-linear-views=            | "My open issues"        | Named issue filters for =org-linear-list-issues= |
+| =org-linear-group-by=         | =state=                 | Group by =state=, =team=, =project= or =nil=     |
+| =org-linear-state-keywords=   | see Mapping             | Org keyword per Linear state type                |
+| =org-linear-state-type-order= | started first           | Order of state groups                            |
+| =org-linear-api-key=          | =nil= (use auth-source) | Key string, or function returning it             |
+| =org-linear-api-page-size=    | 50                      | Issues per request                               |
+| =org-linear-api-max-issues=   | 1000                    | Stop listing after this many issues              |
+
+A view is a name and a filter in the shape of Linear's [[https://linear.app/developers/filtering][IssueFilter]], written as a plist. Vectors become JSON arrays and =t= becomes =true=. The first view is the default.
+
+#+begin_src emacs-lisp
+(setq org-linear-views
+      '(("My open issues"
+         :filter (:assignee (:isMe (:eq t))
+                  :state (:type (:nin ["completed" "canceled" "duplicate"]))))
+        ("ENG in progress"
+         :filter (:team (:key (:eq "ENG"))
+                  :state (:type (:eq "started"))))))
+#+end_src
+
+* Development
+
+=make= byte-compiles (warnings are errors), runs checkdoc and runs the ERT tests. The tests stub the HTTP layer and need no network.
+
+| File                     | Contents                                  |
+|--------------------------+-------------------------------------------|
+| =org-linear.el=          | Commands, views, buffers, keymap          |
+| =org-linear-api.el=      | Auth, async GraphQL requests, pagination  |
+| =org-linear-render.el=   | Issues to Org text (pure functions)       |
+| =org-linear-markdown.el= | Markdown to Org and back (pure functions) |
+| =org-linear-edit.el=     | Edit buffers (=C-c C-c= / =C-c C-k=)      |
+| =test/=                  | ERT tests                                 |
+
+License: GPL-3.0-or-later.
