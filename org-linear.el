@@ -3,7 +3,7 @@
 ;; Copyright (C) 2026 joachimvelde
 
 ;; Author: joachimvelde
-;; Version: 0.4.0
+;; Version: 0.5.0
 ;; Package-Requires: ((emacs "29.1") (org "9.6"))
 ;; URL: https://github.com/joachimvelde/org-linear
 ;; Keywords: outlines, tools
@@ -90,10 +90,16 @@ Example, all open issues of team \"ENG\":
 (defvar-local org-linear--issue-id nil
   "Identifier of the issue shown in the current issue buffer.")
 
+(defvar-local org-linear--refresh-function nil
+  "Function that refreshes the current buffer, or nil.
+Used by buffers other than issue lists and issue buffers, such as
+the agenda file.")
+
 ;; `org-mode' clears buffer-local variables when it starts, and every
 ;; render restarts it so it reads the new #+TODO line.
 (put 'org-linear--view 'permanent-local t)
 (put 'org-linear--issue-id 'permanent-local t)
+(put 'org-linear--refresh-function 'permanent-local t)
 
 (defvar-keymap org-linear-view-mode-map
   :doc "Keymap for `org-linear-view-mode'."
@@ -491,6 +497,7 @@ argument TOP-LEVEL, always start a new thread."
   "Fetch the contents of the current org-linear buffer again."
   (interactive)
   (cond
+   (org-linear--refresh-function (funcall org-linear--refresh-function))
    (org-linear--issue-id (org-linear--fetch-issue (current-buffer) org-linear--issue-id))
    (org-linear--view (org-linear--fetch-view (current-buffer) org-linear--view))
    (t (user-error "Not in an org-linear buffer"))))
@@ -503,6 +510,15 @@ argument TOP-LEVEL, always start a new thread."
       (user-error "No Linear issue at point"))
     (kill-new identifier)
     (message "Copied %s" identifier)))
+
+;;;; Agenda and capture
+
+(autoload 'org-linear-agenda-sync "org-linear-agenda" nil t)
+(autoload 'org-linear-agenda-sync-mode "org-linear-agenda" nil t)
+(autoload 'org-linear-agenda-set-state "org-linear-agenda" nil t)
+(autoload 'org-linear-agenda-set-priority "org-linear-agenda" nil t)
+(autoload 'org-linear-capture "org-linear-capture" nil t)
+(autoload 'org-linear-capture-template "org-linear-capture")
 
 (provide 'org-linear)
 ;;; org-linear.el ends here

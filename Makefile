@@ -1,6 +1,6 @@
 EMACS ?= emacs
 BATCH  = $(EMACS) -Q --batch -L .
-SRCS   = org-linear-markdown.el org-linear-api.el org-linear-render.el org-linear-edit.el org-linear.el
+SRCS   = org-linear-markdown.el org-linear-api.el org-linear-render.el org-linear-edit.el org-linear.el org-linear-agenda.el org-linear-capture.el
 
 .PHONY: all compile test checkdoc clean
 

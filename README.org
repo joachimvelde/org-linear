@@ -29,10 +29,13 @@ Start with these. They have no global key; bind them if you like.
 |--------------------------+------------------------------------------------------------|
 | =org-linear-list-issues= | List your open issues. With =C-u=, pick a view.            |
 | =org-linear-open-issue=  | Open one issue by identifier (=ENG-12=), default at point. |
+| =org-linear-capture=     | Create an issue with =org-capture=. See [[*Capture][Capture]].           |
+| =org-linear-agenda-sync= | Write your issues to the agenda file. See [[*Agenda][Agenda]].          |
 
 #+begin_src emacs-lisp
 (global-set-key (kbd "C-c l l") #'org-linear-list-issues)
 (global-set-key (kbd "C-c l o") #'org-linear-open-issue)
+(global-set-key (kbd "C-c l c") #'org-linear-capture)
 #+end_src
 
 ** In issue lists and issue buffers
@@ -73,6 +76,59 @@ Linear threads have one level of replies, so a reply to a reply goes to the thre
 | =org-linear-api-clear-cache= | Forget cached team states, e.g. after a team adds one. |
 
 =org-linear-view-mode= and =org-linear-edit-mode= are the minor modes that carry the keys above. org-linear turns them on itself.
+
+* Agenda
+
+Your issues can live in the Org agenda: due dates as deadlines, states as TODO keywords, priorities as cookies.
+
+#+begin_src emacs-lisp
+(add-to-list 'org-agenda-files org-linear-agenda-file) ; ~/org/linear.org by default
+(org-linear-agenda-sync-mode 1)                         ; sync every 15 minutes
+#+end_src
+
+| Command                          | What it does                                                  |
+|----------------------------------+---------------------------------------------------------------|
+| =org-linear-agenda-sync=         | Write the issues of =org-linear-agenda-view= to the file now. |
+| =org-linear-agenda-sync-mode=    | Global minor mode: sync on start, then on a timer.            |
+| =org-linear-agenda-set-state=    | In the agenda: change the state of the issue on this line.    |
+| =org-linear-agenda-set-priority= | In the agenda: change the priority of the issue on this line. |
+
+The file is generated, and a sync overwrites it. Visiting it gives the keys of issue buffers, so =C-c C-t= and the rest change Linear and then sync. From the agenda, =RET= jumps to the issue. The two agenda commands have no key; bind them if you like:
+
+#+begin_src emacs-lisp
+(with-eval-after-load 'org-agenda
+  (keymap-set org-agenda-mode-map "C-c l t" #'org-linear-agenda-set-state)
+  (keymap-set org-agenda-mode-map "C-c l p" #'org-linear-agenda-set-priority))
+#+end_src
+
+* Capture
+
+=M-x org-linear-capture= opens a capture buffer. =C-c C-c= creates the issue and copies its identifier; =C-c C-k= cancels. If Linear fails, the buffer stays open with your text.
+
+#+begin_example
+,* [#B] Login times out on Safari
+DEADLINE: <2026-11-20 Fri>
+Seen on *iOS 19* only. Steps:
+- open the app
+- wait a minute
+#+end_example
+
+| Entry         | Issue                                     |
+|---------------+-------------------------------------------|
+| Heading       | Title (TODO keyword and tags are ignored) |
+| =[#A]=–=[#D]= | Urgent, High, Medium, Low                 |
+| =DEADLINE=    | Due date                                  |
+| Body          | Description, converted to Markdown        |
+
+New issues go to =org-linear-capture-team=, or you pick a team if you have several. They are assigned to you unless =org-linear-capture-assign-to-me= is nil.
+
+To use your own capture menu instead, add the template:
+
+#+begin_src emacs-lisp
+(add-to-list 'org-capture-templates (org-linear-capture-template "l"))
+#+end_src
+
+=org-linear-capture-template= takes the template keys and description, both optional.
 
 * Buffers
 
@@ -118,15 +174,21 @@ Each buffer sets its own =#+TODO:= and =#+PRIORITIES:= lines. Your global Org se
 
 * Configuration
 
-| Variable                      | Default                 | Meaning                                          |
-|-------------------------------+-------------------------+--------------------------------------------------|
-| =org-linear-views=            | "My open issues"        | Named issue filters for =org-linear-list-issues= |
-| =org-linear-group-by=         | =state=                 | Group by =state=, =team=, =project= or =nil=     |
-| =org-linear-state-keywords=   | see Mapping             | Org keyword per Linear state type                |
-| =org-linear-state-type-order= | started first           | Order of state groups                            |
-| =org-linear-api-key=          | =nil= (use auth-source) | Key string, or function returning it             |
-| =org-linear-api-page-size=    | 50                      | Issues per request                               |
-| =org-linear-api-max-issues=   | 1000                    | Stop listing after this many issues              |
+| Variable                          | Default                 | Meaning                                          |
+|-----------------------------------+-------------------------+--------------------------------------------------|
+| =org-linear-views=                | "My open issues"        | Named issue filters for =org-linear-list-issues= |
+| =org-linear-group-by=             | =state=                 | Group by =state=, =team=, =project= or =nil=     |
+| =org-linear-state-keywords=       | see Mapping             | Org keyword per Linear state type                |
+| =org-linear-state-type-order=     | started first           | Order of state groups                            |
+| =org-linear-api-key=              | =nil= (use auth-source) | Key string, or function returning it             |
+| =org-linear-api-page-size=        | 50                      | Issues per request                               |
+| =org-linear-api-max-issues=       | 1000                    | Stop listing after this many issues              |
+| =org-linear-agenda-file=          | =~/org/linear.org=      | File the agenda sync writes                      |
+| =org-linear-agenda-view=          | =nil= (first view)      | Name of the view the agenda file shows           |
+| =org-linear-agenda-sync-interval= | 15                      | Minutes between syncs                            |
+| =org-linear-capture-team=         | =nil= (ask)             | Team key new issues go to                        |
+| =org-linear-capture-assign-to-me= | =t=                     | Assign new issues to you                         |
+| =org-linear-capture-timeout=      | 30                      | Seconds to wait for Linear when capturing        |
 
 A view is a name and a filter in the shape of Linear's [[https://linear.app/developers/filtering][IssueFilter]], written as a plist. Vectors become JSON arrays and =t= becomes =true=. The first view is the default.
 
@@ -151,6 +213,8 @@ A view is a name and a filter in the shape of Linear's [[https://linear.app/deve
 | =org-linear-render.el=   | Issues to Org text (pure functions)       |
 | =org-linear-markdown.el= | Markdown to Org and back (pure functions) |
 | =org-linear-edit.el=     | Edit buffers (=C-c C-c= / =C-c C-k=)      |
+| =org-linear-agenda.el=   | Agenda file sync and agenda commands      |
+| =org-linear-capture.el=  | Creating issues with =org-capture=        |
 | =test/=                  | ERT tests                                 |
 
 License: GPL-3.0-or-later.
